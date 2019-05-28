@@ -18,6 +18,9 @@ typedef enum {
   PAR_RANDOM = 0,
   PAR_SORTED_ASC,
   PAR_SORTED_DSC,
+  PAR_DIRECT_BFS,
+  PAR_CSR_BFS_CPU_LAST,
+  PAR_CSR_BFS_CPU_FIRST,
   PAR_MAX
 } partition_algorithm_t;
 

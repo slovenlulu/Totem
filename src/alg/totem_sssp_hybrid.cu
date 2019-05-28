@@ -206,7 +206,13 @@ PRIVATE void sssp_vwarp_gpu(partition_t* par, sssp_state_t* state) {
     // virtual warp, which are all supposed to process the neighbours of a
     // vertex, evaluate the vertex's active state differently, and hence part
     // of the neighbours of that vertex will not get processed.
-    sssp_gpu_launch<VWARP_HARDWARE_WARP_WIDTH, VWARP_MEDIUM_BATCH_SIZE>
+    sssp_gpu_launch<VWARP_HARDWARE_WARP_WIDTH, VWARP_MEDIUM_BATCH_SIZE>,
+    // HIGH partitioning
+    sssp_gpu_launch<VWARP_MEDIUM_WARP_WIDTH, VWARP_MEDIUM_BATCH_SIZE>,
+    // HIGH partitioning
+    sssp_gpu_launch<VWARP_MEDIUM_WARP_WIDTH, VWARP_MEDIUM_BATCH_SIZE>,
+    // HIGH partitioning
+    sssp_gpu_launch<VWARP_MEDIUM_WARP_WIDTH, VWARP_MEDIUM_BATCH_SIZE>
   };
   int par_alg = engine_partition_algorithm();
   SSSP_GPU_FUNC[par_alg](par, state);

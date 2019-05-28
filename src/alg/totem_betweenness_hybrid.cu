@@ -174,7 +174,13 @@ PRIVATE const bc_gpu_func_t FORWARD_GPU_FUNC[] = {
   // HIGH partitioning
   forward_launch_gpu<VWARP_MEDIUM_WARP_WIDTH,  VWARP_MEDIUM_BATCH_SIZE>,
   // LOW partitioning
-  forward_launch_gpu<MAX_THREADS_PER_BLOCK,  VWARP_MEDIUM_BATCH_SIZE>
+  forward_launch_gpu<MAX_THREADS_PER_BLOCK,  VWARP_MEDIUM_BATCH_SIZE>,
+  // HIGH partitioning
+  forward_launch_gpu<VWARP_MEDIUM_WARP_WIDTH,  VWARP_MEDIUM_BATCH_SIZE>,
+  // HIGH partitioning
+  forward_launch_gpu<VWARP_MEDIUM_WARP_WIDTH,  VWARP_MEDIUM_BATCH_SIZE>,
+  // HIGH partitioning
+  forward_launch_gpu<VWARP_MEDIUM_WARP_WIDTH,  VWARP_MEDIUM_BATCH_SIZE>
 };
 
 // Entry point for forward propagation on the GPU.
@@ -430,7 +436,13 @@ PRIVATE const bc_gpu_func_t BACKWARD_GPU_FUNC[] = {
   // HIGH partitioning
   backward_launch_gpu<VWARP_MEDIUM_WARP_WIDTH, VWARP_MEDIUM_BATCH_SIZE>,
   // LOW partitioning
-  backward_launch_gpu<MAX_THREADS_PER_BLOCK,  VWARP_MEDIUM_BATCH_SIZE>
+  backward_launch_gpu<MAX_THREADS_PER_BLOCK,  VWARP_MEDIUM_BATCH_SIZE>,
+  // HIGH partitioning
+  backward_launch_gpu<VWARP_MEDIUM_WARP_WIDTH, VWARP_MEDIUM_BATCH_SIZE>,
+  // HIGH partitioning
+  backward_launch_gpu<VWARP_MEDIUM_WARP_WIDTH, VWARP_MEDIUM_BATCH_SIZE>,
+  // HIGH partitioning
+  backward_launch_gpu<VWARP_MEDIUM_WARP_WIDTH, VWARP_MEDIUM_BATCH_SIZE>
 };
 
 // Entry point for backward propagation on GPU.

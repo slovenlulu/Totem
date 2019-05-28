@@ -260,7 +260,8 @@ PRIVATE bool compare_degrees_dsc(const vdegree_t &a, const vdegree_t &b) {
   if (a.degree == b.degree) { return (a.id < b.id); }
   return (a.degree > b.degree);
 }
-
+//note: partition_fraction is shares
+//partition_labels is\ return result
 PRIVATE
 error_t partition_by_sorted_degree(graph_t* graph, int partition_count,
                                    bool asc, double* partition_fraction,
@@ -362,6 +363,130 @@ error_t partition_by_sorted_degree(graph_t* graph, int partition_count,
     }
   }
 
+  if (attr->gpu_par_randomized) {//default no
+    randomize_across_gpus(graph, (*partition_labels), attr->gpu_count);
+  }
+  if (attr->sorted) {//default no
+    map_vertices_by_degree(graph, partition_count, (*partition_labels),
+                            asc, vd);
+  }
+
+  // Clean up
+  if (even_fractions) {
+    free(partition_fraction);
+  }
+  free(vd);
+  return SUCCESS;
+}
+PRIVATE
+error_t partition_by_sorted_cohesion(graph_t* graph, int partition_count,
+                                   bool asc, double* partition_fraction,
+                                   vid_t** partition_labels,
+                                   totem_attr_t* attr) {
+  // Check pre-conditions
+  if (partition_check(graph, partition_count, partition_fraction,
+                      partition_labels) == FAILURE) {
+    return FAILURE;
+  }
+
+  bool even_fractions = false;
+  if (partition_fraction == NULL) {
+    even_fractions = true;
+    partition_fraction = (double*)calloc(partition_count, sizeof(double));
+    for (int pid = 0; pid < partition_count; pid++) {
+      partition_fraction[pid] = 1.0/(double)partition_count;
+    }
+  }
+
+  // Prepare the degree-sorted list of vertices
+  vdegree_t* vd = (vdegree_t*)calloc(graph->vertex_count, sizeof(vdegree_t));
+  assert(vd);
+  // Calculate the degree for each vertex (# in destination, less source)
+  OMP(omp parallel for)
+  for (vid_t v = 0; v < graph->vertex_count; v++) {
+    vd[v].id = v;
+    vd[v].degree = graph->vertices[v + 1] - graph->vertices[v];//this degree is not true dwgree
+    for(vid_t i = graph->vertices[v]; i < graph->vertices[v + 1]; i++)
+    {
+      if(graph->edges[i] >= v/10*10 && graph->edges[i] <= (v/10+1)*10)
+        vd[v].degree -= 1;
+    }
+    vd[v/10].degree+=vd[v].degree;
+  };
+  OMP(omp parallel for)
+  for (vid_t v = 0; v < graph->vertex_count; v++) {
+    vd[v].degree = vd[v/10].degree;
+  }
+  // Sort the vertices by degree, in ascending or descending order,
+  // (based off of the -i partitioning flag; high or low)
+  if (asc) {
+    tbb::parallel_sort(vd, vd + graph->vertex_count, compare_degrees_asc);
+  } else {
+    tbb::parallel_sort(vd, vd + graph->vertex_count, compare_degrees_dsc);
+  }
+
+  // Allocate the labels array
+  *partition_labels = (vid_t*)calloc(graph->vertex_count, sizeof(vid_t));
+  assert(*partition_labels);
+
+  // At the beginning, assume that all vertices belong to the last partition
+  for (vid_t v = 0; v < graph->vertex_count; v++) {
+    // Separate singletons into a separate partition if desired.
+    if (attr->separate_singletons && vd[v].degree == 0) {
+      (*partition_labels)[vd[v].id] = partition_count - 2;
+    } else {
+      (*partition_labels)[vd[v].id] = partition_count - 1;
+    }
+  }
+
+  // Don't reassign to the CPU.
+  int p_offset = 1;
+  // In the case of separate singletons, also do not apply to that partition.
+  if (attr->separate_singletons) p_offset = 2;
+
+  // Assign vertices to partitions based off of a given alpha value.
+  double total_elements = (double)graph->edge_count;
+  vid_t index = 0;
+  for (int pid = 0; pid < partition_count - p_offset; pid++) {
+    double assigned = 0;
+    while ((assigned / total_elements < partition_fraction[pid]) &&
+           (index < graph->vertex_count)) {
+      // If it is a singleton, separate it if desired.
+      if (attr->separate_singletons && vd[index].degree == 0) {
+        (*partition_labels)[vd[index].id] = partition_count - 2;
+      } else {
+        // Otherwise, assign it normally.
+        assigned += vd[index].degree;
+        (*partition_labels)[vd[index].id] = pid;
+      }
+      index++;
+    }
+  }
+
+  // Lambda will be split amongst the GPU partitions.
+  float lambda = (attr->lambda);
+  if (partition_count - p_offset == 0) {
+    lambda = 0.0; // No GPUs.
+  } else {
+    lambda = lambda / (partition_count - p_offset);
+  }
+  // Reassign some vertices based off of a given lambda value.
+  index = graph->vertex_count - 1;
+  for (int pid = 0; pid < partition_count - p_offset; pid++) {
+    double assigned = 0;
+    while ((assigned / total_elements < lambda) && (index > 0)) {
+      // If it is a singleton, separate it if desired.
+      if (attr->separate_singletons && vd[index].degree == 0) {
+        (*partition_labels)[vd[index].id] = partition_count - 2;
+      } else {
+        // Otherwise, assign it normally.
+        assigned += vd[index].degree;
+        (*partition_labels)[vd[index].id] = pid;
+      }
+      index--;
+    }
+  }
+
   if (attr->gpu_par_randomized) {
     randomize_across_gpus(graph, (*partition_labels), attr->gpu_count);
   }
@@ -377,7 +502,6 @@ error_t partition_by_sorted_degree(graph_t* graph, int partition_count,
   free(vd);
   return SUCCESS;
 }
-
 error_t partition_by_asc_sorted_degree(graph_t* graph, int partition_count,
                                        double* partition_fraction,
                                        vid_t** partition_labels,
@@ -395,7 +519,22 @@ error_t partition_by_dsc_sorted_degree(graph_t* graph, int partition_count,
                                     partition_fraction, partition_labels,
                                     attr);
 }
-
+error_t partition_by_asc_sorted_cohesion(graph_t* graph, int partition_count,
+										  double* partition_fraction,
+										  vid_t** partition_labels,
+										  totem_attr_t* attr){
+  return partition_by_sorted_cohesion(graph, partition_count, true,
+                                    partition_fraction, partition_labels,
+                                    attr);
+}
+error_t partition_by_dsc_sorted_cohesion(graph_t* graph, int partition_count,
+										  double* partition_fraction,
+										  vid_t** partition_labels,
+										  totem_attr_t* attr){
+  return partition_by_sorted_cohesion(graph, partition_count, false,
+                                    partition_fraction, partition_labels,
+                                    attr);
+}
 PRIVATE error_t init_allocate_struct_space(graph_t* graph, int pcount,
                                            size_t push_msg_size,
                                            size_t pull_msg_size,
@@ -704,4 +843,237 @@ void partition_set_update_msg_size(partition_set_t* pset,
   assert(pset);
   if (dir == GROOVES_PUSH) pset->push_msg_size = msg_size;
   if (dir == GROOVES_PULL) pset->pull_msg_size = msg_size;
+}
+
+error_t partition_by_bfs_tree(graph_t* graph, int partition_count,
+                         double* partition_fraction, vid_t** partition_labels,
+                         totem_attr_t* attr) {
+  // Check pre-conditions
+  if (partition_check(graph, partition_count, partition_fraction,
+                      partition_labels) == FAILURE) {
+    return FAILURE;
+  }
+ // partition_count = 4;
+  // Check if the client is asking for equal divide among partitions
+  bool even_fractions = false;
+  if (partition_fraction == NULL) {
+    even_fractions = true;
+    partition_fraction = (double*)calloc(partition_count, sizeof(double));
+    for (int pid = 0; pid < partition_count; pid++) {
+      partition_fraction[pid] = 1.0/(double)partition_count;
+    }
+  }
+  
+  // Allocate the partition vector
+  vid_t* partitions = (vid_t*)calloc(graph->vertex_count , sizeof(vid_t));
+  assert(partitions != NULL);
+  //totem_memset(partitions,(vid_t)partition_count-1,(size_t)graph->vertex_count*sizeof(vid_t),TOTEM_MEM_HOST);
+  //memset(partitions,(vid_t)partition_count-1,(size_t)graph->vertex_count*sizeof(vid_t));
+  // Initialize the random number generator
+  // Allocate all the partition ids to the id vector
+  vid_t total_elements = graph->edge_count;
+  vid_t index = 0;
+  //vid_t debug_edge_rest = total_elements;
+  //printf("\n%u",total_elements*partition_fraction[0]);
+  for (int pid = partition_count; pid > 0 ; pid--) {
+	vid_t elements_in_this_fraction = total_elements * partition_fraction[pid];
+	//printf("\n%f %u",partition_fraction[pid],elements_in_this_fraction);fflush(stdout);
+    vid_t assigned = 0;
+	//vid_t debug_assigned_vertex=0;
+    while ((assigned < elements_in_this_fraction) &&
+           (index < graph->vertex_count)) {
+		if(partitions[index]==0){//add vertex @index
+			partitions[index] = pid;
+			assigned+=graph->vertices[index+1]-graph->vertices[index];
+	//		debug_assigned_vertex++;
+		}
+		if(partitions[index]==pid){
+		for(vid_t edge_from_index = graph->vertices[index];
+			edge_from_index < graph->vertices[index+1] && (assigned < elements_in_this_fraction) ;
+			edge_from_index++){//travese edge of vertex @index 
+			if(partitions[graph->edges[edge_from_index]]==0){
+			partitions[graph->edges[edge_from_index]] = pid;
+			assigned+=graph->vertices[graph->edges[edge_from_index]+1]-graph->vertices[graph->edges[edge_from_index]];
+	//		debug_assigned_vertex++;
+			}
+		}
+		}
+      index++;
+    }
+	//debug_edge_rest-=assigned;
+	//printf("\nedge:%u vertex:%u edge_rest:%u",assigned,debug_assigned_vertex,debug_edge_rest);
+  }
+  *partition_labels = partitions;
+	
+  if (attr->sorted) {
+    map_vertices_by_degree(graph, partition_count, partitions);
+  }
+  if (even_fractions) {
+    free(partition_fraction);
+  }
+//  for(vid_t i=0;i<graph->vertex_count;i++)
+//	  printf("%d ",partitions[i]);
+ // printf("partition_bfs_end");fflush(stdout);
+  return SUCCESS;
+}
+error_t partition_by_bfs_graph(graph_t* graph, int partition_count,
+                         double* partition_fraction, vid_t** partition_labels,
+                         totem_attr_t* attr) {
+  // Check pre-conditions
+  if (partition_check(graph, partition_count, partition_fraction,
+                      partition_labels) == FAILURE) {
+    return FAILURE;
+  }
+ // partition_count = 4;
+  // Check if the client is asking for equal divide among partitions
+  bool even_fractions = false;
+  if (partition_fraction == NULL) {
+    even_fractions = true;
+    partition_fraction = (double*)calloc(partition_count, sizeof(double));
+    for (int pid = 0; pid < partition_count; pid++) {
+      partition_fraction[pid] = 1.0/(double)partition_count;
+    }
+  }
+  
+  // Allocate the partition vector
+  vid_t* partitions = (vid_t*)calloc(graph->vertex_count , sizeof(vid_t));
+  assert(partitions != NULL);
+  //totem_memset(partitions,(vid_t)partition_count-1,(size_t)graph->vertex_count*sizeof(vid_t),TOTEM_MEM_HOST);
+  //memset(partitions,(vid_t)partition_count-1,(size_t)graph->vertex_count*sizeof(vid_t));
+  // Initialize the random number generator
+  // Allocate all the partition ids to the id vector
+  vid_t total_elements = graph->edge_count;
+  vid_t index = 0;
+  vid_t min_vertex_visited = 0;
+  //vid_t debug_edge_rest = total_elements;
+  //printf("\n%u",total_elements*partition_fraction[0]);
+  for (int pid = partition_count; pid > 0 ; pid--) {
+	vid_t elements_in_this_fraction = total_elements * partition_fraction[pid];
+	//printf("\n%f %u",partition_fraction[pid],elements_in_this_fraction);fflush(stdout);
+    vid_t assigned = 0;
+	std::queue<vid_t> bfs_queue;
+	//vid_t debug_assigned_vertex=0;
+	for(index = min_vertex_visited;partitions[index]!=0;index++);
+	min_vertex_visited = index;//all vertices before @min_vertex_visited were visited
+    while (assigned < elements_in_this_fraction ) {
+		if(partitions[index]==0){//add vertex @index
+			partitions[index] = pid;
+			assigned+=graph->vertices[index+1]-graph->vertices[index];
+			bfs_queue.push(index);
+	//		printf("%u ",index);fflush(stdout);
+	//		debug_assigned_vertex++;
+		
+			for(vid_t edge_from_index = graph->vertices[index];
+				edge_from_index < graph->vertices[index+1] && (assigned < elements_in_this_fraction) ;
+				edge_from_index++){//travese edge of vertex @index 
+				if(partitions[graph->edges[edge_from_index]]==0){
+				partitions[graph->edges[edge_from_index]] = pid;
+				assigned+=graph->vertices[graph->edges[edge_from_index]+1]-graph->vertices[graph->edges[edge_from_index]];
+		//		debug_assigned_vertex++;
+				bfs_queue.push(edge_from_index);
+				//printf("%u ",edge_from_index);fflush(stdout);
+				}
+			}
+			bfs_queue.pop();
+		}
+		if(bfs_queue.empty() || bfs_queue.front() >= graph->vertex_count){
+			//index=rand() % graph->vertex_count;
+			//printf("queue empty! ");fflush(stdout);
+			for(index = min_vertex_visited;partitions[index]!=0;index++);
+		}
+		else{
+			index=bfs_queue.front();
+			bfs_queue.pop();
+		}
+		//printf("%u ",index);fflush(stdout);
+    }
+	//debug_edge_rest-=assigned;
+	//printf("\nedge:%u vertex:%u edge_rest:%u",assigned,debug_assigned_vertex,debug_edge_rest);
+  }
+  *partition_labels = partitions;
+	
+  if (attr->sorted) {
+    map_vertices_by_degree(graph, partition_count, partitions);
+  }
+  if (even_fractions) {
+    free(partition_fraction);
+  }
+//  for(vid_t i=0;i<graph->vertex_count;i++)
+//	  printf("%d ",partitions[i]);
+ // printf("partition_bfs_end");fflush(stdout);
+  return SUCCESS;
+}
+error_t partition_by_bfs_tree_CPU_last(graph_t* graph, int partition_count,
+                         double* partition_fraction, vid_t** partition_labels,
+                         totem_attr_t* attr) {
+  // Check pre-conditions
+  if (partition_check(graph, partition_count, partition_fraction,
+                      partition_labels) == FAILURE) {
+    return FAILURE;
+  }
+ // partition_count = 4;
+  // Check if the client is asking for equal divide among partitions
+  bool even_fractions = false;
+  if (partition_fraction == NULL) {
+    even_fractions = true;
+    partition_fraction = (double*)calloc(partition_count, sizeof(double));
+    for (int pid = 0; pid < partition_count; pid++) {
+      partition_fraction[pid] = 1.0/(double)partition_count;
+    }
+  }
+  
+  // Allocate the partition vector
+  vid_t* partitions = (vid_t*)malloc(graph->vertex_count * sizeof(vid_t));
+  assert(partitions != NULL);
+  totem_memset(partitions,(vid_t)partition_count-1,(size_t)graph->vertex_count,TOTEM_MEM_HOST);
+ // printf("partition_count-1 = %u",(vid_t)partition_count-1);fflush(stdout);
+ // memset(partitions,(vid_t)partition_count-1,(size_t)graph->vertex_count*sizeof(vid_t));
+  //printf("partitions[0] = %u",(vid_t)partitions[0]);fflush(stdout);
+  //assert(partitions[0] == partition_count-1 && partitions[graph->vertex_count-1] == partition_count-1);
+  // Initialize the random number generator
+  // Allocate all the partition ids to the id vector
+  vid_t total_elements = graph->edge_count;
+  vid_t index = 0;
+  //vid_t debug_edge_rest = total_elements;
+  printf("\n%u",total_elements*partition_fraction[0]);
+  for (int pid = 0; pid < partition_count-1 ; pid++) {
+	vid_t elements_in_this_fraction = total_elements * partition_fraction[pid];
+	//printf("\n%f %u",partition_fraction[pid],elements_in_this_fraction);fflush(stdout);
+    vid_t assigned = 0;
+	//vid_t debug_assigned_vertex=0;
+    while ((assigned < elements_in_this_fraction) &&
+           (index < graph->vertex_count)) {
+		if(partitions[index]==partition_count-1){//add vertex @index
+			partitions[index] = pid;
+			assigned+=graph->vertices[index+1]-graph->vertices[index];
+	//		debug_assigned_vertex++;
+		}
+		if(partitions[index]==pid){
+		for(vid_t edge_from_index = graph->vertices[index];
+			edge_from_index < graph->vertices[index+1] && (assigned < elements_in_this_fraction) ;
+			edge_from_index++){//travese edge of vertex @index 
+			if(partitions[graph->edges[edge_from_index]]==partition_count-1){
+			partitions[graph->edges[edge_from_index]] = pid;
+			assigned+=graph->vertices[graph->edges[edge_from_index]+1]-graph->vertices[graph->edges[edge_from_index]];
+	//		debug_assigned_vertex++;
+			}
+		}
+		}
+      index++;
+    }
+	//debug_edge_rest-=assigned;
+	//printf("\nedge:%u vertex:%u edge_rest:%u",assigned,debug_assigned_vertex,debug_edge_rest);
+  }
+  *partition_labels = partitions;
+	
+  if (attr->sorted) {
+    map_vertices_by_degree(graph, partition_count, partitions);
+  }
+  if (even_fractions) {
+    free(partition_fraction);
+  }
+//  for(vid_t i=0;i<graph->vertex_count;i++)
+//	  printf("%d ",partitions[i]);
+ // printf("partition_bfs_end");fflush(stdout);
+  return SUCCESS;
 }

@@ -286,6 +286,21 @@ PRIVATE void graph500_tuned_launch_gpu(partition_t* par,
       graph500_launch_gpu<MAX_THREADS_PER_BLOCK, 
                           VWARP_MEDIUM_BATCH_SIZE, false>,
       graph500_launch_gpu<MAX_THREADS_PER_BLOCK, VWARP_MEDIUM_BATCH_SIZE, true>
+    }, {
+      // HIGH partitioning
+      graph500_launch_gpu<VWARP_MEDIUM_WARP_WIDTH, 
+                          VWARP_LARGE_BATCH_SIZE, false>,
+      graph500_launch_gpu<VWARP_MEDIUM_WARP_WIDTH, VWARP_LARGE_BATCH_SIZE, true>
+    }, {
+      // HIGH partitioning
+      graph500_launch_gpu<VWARP_MEDIUM_WARP_WIDTH, 
+                          VWARP_LARGE_BATCH_SIZE, false>,
+      graph500_launch_gpu<VWARP_MEDIUM_WARP_WIDTH, VWARP_LARGE_BATCH_SIZE, true>
+    }, {
+      // HIGH partitioning
+      graph500_launch_gpu<VWARP_MEDIUM_WARP_WIDTH, 
+                          VWARP_LARGE_BATCH_SIZE, false>,
+      graph500_launch_gpu<VWARP_MEDIUM_WARP_WIDTH, VWARP_LARGE_BATCH_SIZE, true>
     }
   };
   int par_alg = engine_partition_algorithm();

@@ -12,6 +12,8 @@
 #include "totem_grooves.h"
 #include "totem_attributes.h"
 #include <cuda_runtime.h>
+#include <queue>
+#include <stack>
 
 /**
  * Log (base 2) of the maximum number of partitions. Practically, it specifies
@@ -205,7 +207,26 @@ error_t partition_by_dsc_sorted_degree(graph_t* graph, int partition_count,
                                        double* partition_fraction,
                                        vid_t** partition_labels,
                                        totem_attr_t* attr);
-
+error_t partition_by_asc_sorted_cohesion(graph_t* graph, int partition_count,
+                                       double* partition_fraction,
+                                       vid_t** partition_labels,
+                                       totem_attr_t* attr);
+error_t partition_by_dsc_sorted_cohesion(graph_t* graph, int partition_count,
+                                       double* partition_fraction,
+                                       vid_t** partition_labels,
+                                       totem_attr_t* attr);
+error_t partition_by_bfs_tree(graph_t* graph, int partition_count,
+                                       double* partition_fraction,
+                                       vid_t** partition_labels,
+                                       totem_attr_t* attr);
+error_t partition_by_bfs_graph(graph_t* graph, int partition_count,
+                                       double* partition_fraction,
+                                       vid_t** partition_labels,
+                                       totem_attr_t* attr);
+error_t partition_by_bfs_tree_CPU_last(graph_t* graph, int partition_count,
+                                       double* partition_fraction,
+                                       vid_t** partition_labels,
+                                       totem_attr_t* attr);
 /**
  * The following defines the signature of a partitioning algorithm function. The
  * PARTITION_FUNC array offers a simple way to invoke a partitioning algorithm
@@ -217,7 +238,10 @@ typedef error_t(*partition_func_t)(graph_t*, int, double*, vid_t**, totem_attr_t
 PRIVATE const partition_func_t PARTITION_FUNC[] = {
   partition_random,
   partition_by_asc_sorted_degree,
-  partition_by_dsc_sorted_degree
+  partition_by_dsc_sorted_degree,
+  partition_by_bfs_graph,
+  partition_by_bfs_tree_CPU_last,
+  partition_by_bfs_tree,
 };
 
 /**

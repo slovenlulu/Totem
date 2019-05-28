@@ -286,14 +286,13 @@ PRIVATE void benchmark_run() {
     attr.pull_msg_size = BENCHMARKS[options->benchmark].pull_msg_size;
     attr.alloc_func = BENCHMARKS[options->benchmark].alloc_func;
     attr.free_func = BENCHMARKS[options->benchmark].free_func;
-    CALL_SAFE(totem_init(graph, &attr));
+    CALL_SAFE(totem_init(graph, &attr));//engine_init
   }
 
   // Configure OpenMP.
   omp_set_num_threads(options->thread_count);
   omp_set_schedule(options->omp_sched, 0);
   print_header(graph, totem_based);
-
   srand(SEED);
   for (int s = 0; s < options->repeat; s++) {
     totem_timing_reset();

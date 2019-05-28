@@ -8,7 +8,7 @@
 #include "totem_benchmark.h"
 
 PRIVATE const char* PLATFORM_STR[] = {"CPU", "GPU", "HYBRID"};
-PRIVATE const char* PAR_ALGO_STR[] = {"RANDOM", "HIGH", "LOW"};
+PRIVATE const char* PAR_ALGO_STR[] = {"RANDOM", "HIGH", "LOW", "DIRECT_BFS", "CSR_BFS_CPU_LAST","CSR_BFS_CPU_FIRST"};
 PRIVATE const char* OMP_SCHEDULE_STR[] = {"", "STATIC", "DYNAMIC", "GUIDED",
                                           "RUNTIME"};
 PRIVATE const char* GPU_GRAPH_MEM_STR[] = {"DEVICE", "MAPPED",

@@ -232,7 +232,13 @@ PRIVATE void page_rank_incoming_gpu(partition_t* par, bool last_round) {
     // HIGH partitioning
     page_rank_gpu_launch<VWARP_MEDIUM_WARP_WIDTH, VWARP_MEDIUM_BATCH_SIZE>,
     // LOW partitioning
-    page_rank_gpu_launch<MAX_THREADS_PER_BLOCK, VWARP_MEDIUM_WARP_WIDTH>
+    page_rank_gpu_launch<MAX_THREADS_PER_BLOCK, VWARP_MEDIUM_WARP_WIDTH>,
+    // HIGH partitioning
+    page_rank_gpu_launch<VWARP_MEDIUM_WARP_WIDTH, VWARP_MEDIUM_BATCH_SIZE>,
+    // HIGH partitioning
+    page_rank_gpu_launch<VWARP_MEDIUM_WARP_WIDTH, VWARP_MEDIUM_BATCH_SIZE>,
+    // HIGH partitioning
+    page_rank_gpu_launch<VWARP_MEDIUM_WARP_WIDTH, VWARP_MEDIUM_BATCH_SIZE>
   };
   page_rank_state_t* ps = (page_rank_state_t*)par->algo_state;  
   int par_alg = engine_partition_algorithm();

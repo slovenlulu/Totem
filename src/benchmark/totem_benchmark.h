@@ -12,7 +12,6 @@
 #include "totem.h"
 #include "totem_alg.h"
 #include "totem_util.h"
-
 // Benchmark algorithm types.
 typedef enum {
   BENCHMARK_BFS = 0,
@@ -113,5 +112,4 @@ void print_header(graph_t* graph, bool totem_based);
  */
 void print_timing(graph_t* graph, double time_total, uint64_t trv_edges,
                   bool totem_based);
-
 #endif  // TOTEM_BENCHMARK_H

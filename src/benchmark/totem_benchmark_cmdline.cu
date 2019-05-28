@@ -68,6 +68,9 @@ PRIVATE void display_help(char* exe_name, int exit_err) {
          "     %d: Random (default)\n"
          "     %d: High degree nodes on CPU\n"
          "     %d: Low degree nodes on CPU\n"
+		 "     %d: Direct BFS PARTITION\n"
+		 "     %d: CSR_BFS CPU GET LAST PARTITION\n"
+		 "     %d: CSR_BFS CPU GET FIRST PARTITION\n"
          "  -lNUM [0-100] An additional percentage of edges assigned to the\n"
          "        GPUs, the last lambda%% edges are assigned. This enables\n"
          "        placement of each extreme on the GPU partitions.\n"
@@ -98,8 +101,8 @@ PRIVATE void display_help(char* exe_name, int exit_err) {
          BENCHMARK_BETWEENNESS, BENCHMARK_GRAPH500,
          BENCHMARK_CLUSTERING_COEFFICIENT, BENCHMARK_BFS_STEPWISE,
          BENCHMARK_GRAPH500_STEPWISE, BENCHMARK_CC, get_gpu_count(), PAR_RANDOM,
-         PAR_SORTED_ASC, PAR_SORTED_DSC, GPU_GRAPH_MEM_DEVICE,
-         GPU_GRAPH_MEM_MAPPED, GPU_GRAPH_MEM_MAPPED_VERTICES,
+         PAR_SORTED_ASC, PAR_SORTED_DSC,PAR_DIRECT_BFS,PAR_CSR_BFS_CPU_LAST,PAR_CSR_BFS_CPU_FIRST,
+		 GPU_GRAPH_MEM_DEVICE,GPU_GRAPH_MEM_MAPPED, GPU_GRAPH_MEM_MAPPED_VERTICES,
          GPU_GRAPH_MEM_MAPPED_EDGES, GPU_GRAPH_MEM_PARTITIONED_EDGES,
          PLATFORM_CPU, PLATFORM_GPU, PLATFORM_HYBRID, REPEAT_MAX,
          omp_sched_static, omp_sched_dynamic, omp_sched_guided,
@@ -118,7 +121,7 @@ benchmark_options_t* benchmark_cmdline_parse(int argc, char** argv) {
   while (((ch = getopt(argc, argv, "a:b:cdeg:i:l:m:op:qr:s:t:h")) != EOF)) {
     switch (ch) {
       case 'a':
-        options.alpha = atoi(optarg);
+          options.alpha = atoi(optarg);
         if (options.alpha > 100 || options.alpha < 0) {
           fprintf(stderr, "Invalid alpha value\n");
           display_help(argv[0], -1);
